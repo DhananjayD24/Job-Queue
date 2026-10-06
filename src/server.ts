@@ -2,6 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import pool from "./db/pool.js";
 
+import jobRoutes from "./jobs/job.routes.js";
+
 dotenv.config();
 
 const app = express();
@@ -32,6 +34,8 @@ app.get("/health", async (_req, res) => {
     });
   }
 });
+
+app.use("/jobs", jobRoutes);
 
 const PORT = process.env.PORT || 3000;
 
