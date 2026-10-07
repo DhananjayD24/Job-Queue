@@ -3,6 +3,7 @@ import { RedisConnection } from "../redis/RedisConnection.js";
 import type { JobData } from "../jobs/job.types.js";
 import { claimJob } from "../redis/scripts/claimJob.js";
 import { DelayedJobScheduler } from "../queue/DelayedJobScheduler.js";
+import { StalledJobRecovery } from "./StalledJobRecovery.js";
 
 export type Processor = (job: JobData) => Promise<void>;
 
@@ -25,6 +26,7 @@ export class Worker {
     private running = true;
     private heartbeatTimer?: NodeJS.Timeout;
     private readonly delayedScheduler: DelayedJobScheduler;
+    private readonly stalledRecovery: StalledJobRecovery;
 
     constructor(
         name: string,
@@ -49,6 +51,16 @@ export class Worker {
             );
 
         this.delayedScheduler.start();
+
+        this.stalledRecovery =
+            new StalledJobRecovery(
+                this.name,
+                this.workerId,
+                this.client
+            );
+
+        this.stalledRecovery.start();
+
         this.start();
     }
 
@@ -238,6 +250,7 @@ export class Worker {
         this.running = false;
       
         this.delayedScheduler.stop();
+        this.stalledRecovery.stop();
       
         if (this.heartbeatTimer) {
           clearInterval(this.heartbeatTimer);
