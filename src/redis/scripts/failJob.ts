@@ -81,11 +81,19 @@ redis.call(
 
 if delay <= 0 then
 
-  redis.call(
-    "RPUSH",
-    readyKey,
-    jobId
-  )
+local priority =
+tonumber(redis.call(
+  "HGET",
+  jobKey,
+  "priority"
+)) or 0
+
+redis.call(
+"ZADD",
+readyKey,
+-priority,
+jobId
+)
 
 else
 

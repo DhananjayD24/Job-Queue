@@ -4,8 +4,8 @@ const ADD_JOB_SCRIPT = `
 local jobId = redis.call("INCR", KEYS[1])
 
 local jobKey = ARGV[1] .. jobId
-local queueReadyKey = ARGV[2]
-local queueDelayedKey = ARGV[3]
+local readyKey = ARGV[2]
+local delayedKey = ARGV[3]
 
 redis.call(
   "HSET",
@@ -20,22 +20,30 @@ redis.call(
   "scheduledAt", ARGV[9],
   "backoffType", ARGV[10],
   "backoffDelay", ARGV[11],
-  "status", ARGV[12]
+  "status", "waiting"
 )
 
 if tonumber(ARGV[9]) > tonumber(ARGV[8]) then
+
   redis.call(
     "ZADD",
-    queueDelayedKey,
+    delayedKey,
     ARGV[9],
     tostring(jobId)
   )
+
 else
+
+  local priorityScore =
+    -tonumber(ARGV[7])
+
   redis.call(
-    "RPUSH",
-    queueReadyKey,
+    "ZADD",
+    readyKey,
+    priorityScore,
     tostring(jobId)
   )
+
 end
 
 return tostring(jobId)
@@ -70,10 +78,7 @@ export async function addJob(
     String(createdAt),
     String(scheduledAt),
     backoffType,
-    String(backoffDelay),
-    scheduledAt > createdAt
-      ? "waiting"
-      : "waiting"
+    String(backoffDelay)
   );
 
   return String(result);

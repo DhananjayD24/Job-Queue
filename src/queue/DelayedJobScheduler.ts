@@ -57,10 +57,18 @@ export class DelayedJobScheduler {
         );
 
         if (removed === 1) {
-          await this.client.rpush(
-            readyKey,
-            jobId
-          );
+            const priority = Number(
+                await this.client.hget(
+                  `job:${this.queueName}:${jobId}`,
+                  "priority"
+                )
+              );
+              
+              await this.client.zadd(
+                readyKey,
+                -priority,
+                jobId
+              );
 
           await this.client.hset(
             `job:${this.queueName}:${jobId}`,

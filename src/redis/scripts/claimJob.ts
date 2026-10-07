@@ -1,15 +1,30 @@
 import type { Redis } from "ioredis";
 
 const CLAIM_JOB_SCRIPT = `
-local jobId = redis.call("LPOP", KEYS[1])
+local jobId = redis.call(
+  "ZRANGE",
+  KEYS[1],
+  0,
+  0
+)[1]
 
 if not jobId then
   return nil
 end
 
+redis.call(
+  "ZREM",
+  KEYS[1],
+  jobId
+)
+
 local jobKey = ARGV[4] .. jobId
 
-redis.call("RPUSH", KEYS[2], jobId)
+redis.call(
+  "RPUSH",
+  KEYS[2],
+  jobId
+)
 
 redis.call(
   "HSET",
@@ -43,5 +58,7 @@ export async function claimJob(
     jobKeyPrefix
   );
 
-  return result ? String(result) : null;
+  return result
+    ? String(result)
+    : null;
 }
