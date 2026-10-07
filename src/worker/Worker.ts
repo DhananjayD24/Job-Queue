@@ -5,6 +5,7 @@ import { claimJob } from "../redis/scripts/claimJob.js";
 import { DelayedJobScheduler } from "../queue/DelayedJobScheduler.js";
 import { StalledJobRecovery } from "./StalledJobRecovery.js";
 import { completeJob } from "../redis/scripts/completeJob.js";
+import { failJob as failJobAtomically } from "../redis/scripts/failJob.js";
 
 export type Processor = (job: JobData) => Promise<void>;
 
@@ -149,57 +150,27 @@ export class Worker {
         );
       }
 
-    private async failJob(
+      private async failJob(
         jobId: string,
         error: unknown
-    ): Promise<void> {
+      ): Promise<void> {
         const message =
-            error instanceof Error
-                ? error.message
-                : String(error);
-
-        const jobKey = `job:${this.name}:${jobId}`;
-        const attemptsMade = Number(
-            await this.client.hincrby(
-                jobKey,
-                "attemptsMade",
-                1
-            )
+          error instanceof Error
+            ? error.message
+            : String(error);
+      
+        await failJobAtomically(
+          this.client,
+          `job:${this.name}:${jobId}`,
+          `queue:${this.name}:processing`,
+          `queue:${this.name}:ready`,
+          `queue:${this.name}:delayed`,
+          `queue:${this.name}:dlq`,
+          jobId,
+          this.workerId,
+          message
         );
-
-        const maxAttempts = Number(
-            await this.client.hget(
-                jobKey,
-                "maxAttempts"
-            )
-        );
-
-        await this.client.hset(
-            jobKey,
-            "failedReason",
-            message
-        );
-
-        await this.client.lrem(
-            `queue:${this.name}:processing`,
-            1,
-            jobId
-        );
-
-        if (attemptsMade < maxAttempts) {
-            await this.retryJob(
-                jobId,
-                attemptsMade
-            );
-
-            return;
-        }
-
-        await this.moveToDeadLetterQueue(
-            jobId,
-            message
-        );
-    }
+      }
 
     private startHeartbeat(): void {
         this.heartbeatTimer = setInterval(
