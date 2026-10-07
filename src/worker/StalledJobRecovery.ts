@@ -1,9 +1,9 @@
 import type { Redis } from "ioredis";
+import { recoverStalledJob } from "../redis/scripts/recoverStalledJob.js";
 
 export class StalledJobRecovery {
   private readonly client;
   private readonly queueName: string;
-  private readonly workerId: string;
   private readonly interval: number;
 
   private running = false;
@@ -11,12 +11,10 @@ export class StalledJobRecovery {
 
   constructor(
     queueName: string,
-    workerId: string,
     client: Redis,
     interval = 5_000
   ) {
     this.queueName = queueName;
-    this.workerId = workerId;
     this.client = client;
     this.interval = interval;
   }
@@ -43,6 +41,7 @@ export class StalledJobRecovery {
 
     if (this.timer) {
       clearInterval(this.timer);
+      this.timer = undefined;
     }
   }
 
@@ -63,56 +62,17 @@ export class StalledJobRecovery {
       -1
     );
 
-    const now = Date.now();
-
     for (const jobId of jobIds) {
       const jobKey =
         `job:${this.queueName}:${jobId}`;
 
-      const lockExpiresAt =
-        Number(
-          await this.client.hget(
-            jobKey,
-            "lockExpiresAt"
-          )
-        );
-
-      if (
-        !lockExpiresAt ||
-        lockExpiresAt > now
-      ) {
-        continue;
-      }
-
-      const removed =
-        await this.client.lrem(
-          processingKey,
-          1,
-          jobId
-        );
-
-      if (removed !== 1) {
-        continue;
-      }
-
-      await this.client
-        .multi()
-        .hset(
-          jobKey,
-          "status",
-          "waiting"
-        )
-        .hdel(
-          jobKey,
-          "lockedBy",
-          "lockedAt",
-          "lockExpiresAt"
-        )
-        .rpush(
-          readyKey,
-          jobId
-        )
-        .exec();
+      await recoverStalledJob(
+        this.client,
+        jobKey,
+        processingKey,
+        readyKey,
+        jobId
+      );
     }
   }
 }

@@ -61,7 +61,6 @@ export class Worker {
         this.stalledRecovery =
             new StalledJobRecovery(
                 this.name,
-                this.workerId,
                 this.client
             );
 
