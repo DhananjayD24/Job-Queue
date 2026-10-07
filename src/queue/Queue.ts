@@ -64,10 +64,18 @@ export class Queue {
             String(options.backoff?.delay ?? 0)
         );
 
-        await this.client.rpush(
-            `queue:${this.name}:ready`,
-            job.id
-        );
+        if (delay > 0) {
+            await this.client.zadd(
+              `queue:${this.name}:delayed`,
+              job.scheduledAt,
+              job.id
+            );
+          } else {
+            await this.client.rpush(
+              `queue:${this.name}:ready`,
+              job.id
+            );
+          }
 
         return job;
     }
