@@ -1,41 +1,53 @@
 import type { Redis } from "ioredis";
 
 const ADD_JOB_SCRIPT = `
-local jobId = redis.call("INCR", KEYS[1])
+local jobId = redis.call(
+  "INCR",
+  KEYS[1]
+)
 
 local jobKey = ARGV[1] .. jobId
-local readyKey = ARGV[2]
-local delayedKey = ARGV[3]
+local readyKey = KEYS[2]
+local delayedKey = KEYS[3]
+
+local name = ARGV[2]
+local data = ARGV[3]
+local maxAttempts = ARGV[4]
+local priority = ARGV[5]
+local createdAt = ARGV[6]
+local scheduledAt = ARGV[7]
+local backoffType = ARGV[8]
+local backoffDelay = ARGV[9]
 
 redis.call(
   "HSET",
   jobKey,
   "id", tostring(jobId),
-  "name", ARGV[4],
-  "data", ARGV[5],
+  "name", tostring(name),
+  "data", tostring(data),
   "attemptsMade", "0",
-  "maxAttempts", ARGV[6],
-  "priority", ARGV[7],
-  "createdAt", ARGV[8],
-  "scheduledAt", ARGV[9],
-  "backoffType", ARGV[10],
-  "backoffDelay", ARGV[11],
+  "maxAttempts", tostring(maxAttempts),
+  "priority", tostring(priority),
+  "createdAt", tostring(createdAt),
+  "scheduledAt", tostring(scheduledAt),
+  "backoffType", tostring(backoffType),
+  "backoffDelay", tostring(backoffDelay),
   "status", "waiting"
 )
 
-if tonumber(ARGV[9]) > tonumber(ARGV[8]) then
+if tonumber(scheduledAt) > tonumber(createdAt) then
 
   redis.call(
     "ZADD",
     delayedKey,
-    ARGV[9],
+    tonumber(scheduledAt),
     tostring(jobId)
   )
 
 else
 
   local priorityScore =
-    -tonumber(ARGV[7])
+    -tonumber(priority)
 
   redis.call(
     "ZADD",

@@ -1,23 +1,40 @@
 {
-  "name": "reliable-job-queue-with-dead-letter-recovery",
+  "name": "reliable-job-queue",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "description": "A Redis-backed reliable job queue for Node.js with retries, delayed jobs, priority scheduling, dead-letter queues, and stalled-job recovery.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "tsc --build --clean"
+  },
+  "keywords": [
+    "job-queue",
+    "redis",
+    "queue",
+    "worker",
+    "background-jobs",
+    "dead-letter-queue",
+    "retry",
+    "delayed-jobs",
+    "typescript"
+  ],
+  "dependencies": {
+    "ioredis": "^6.0.0"
+  },
   "devDependencies": {
     "@types/node": "^26.6.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "ioredis": "^6.0.0"
   }
 }
