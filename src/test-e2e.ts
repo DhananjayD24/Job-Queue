@@ -4,51 +4,110 @@ import { Worker } from "./worker/Worker.js";
 
 const redis = new RedisConnection();
 
-const queue = new Queue("test-queue", redis);
+const queue = new Queue("reliability-test", redis);
 
-let processed = 0;
+let successfulJobs = 0;
+let failedAttempts = 0;
 
 const worker = new Worker(
-  "test-queue",
+  "reliability-test",
   async (job) => {
     console.log(
-      `Processing job ${job.id}:`,
-      job.name,
-      job.data
+      `Processing ${job.id}: ${job.name}`
     );
 
-    processed++;
+    // Retry/DLQ test
+    if (job.name === "failing-job") {
+      failedAttempts++;
+
+      throw new Error(
+        `Intentional failure #${failedAttempts}`
+      );
+    }
+
+    successfulJobs++;
 
     await new Promise((resolve) =>
-      setTimeout(resolve, 500)
+      setTimeout(resolve, 300)
     );
   },
   redis
 );
 
+// --------------------------------------------------
+// 1. Priority jobs
+// --------------------------------------------------
+
 await queue.add(
-  "send-email",
+  "low-priority",
   {
-    to: "test@example.com",
+    message: "low"
+  },
+  {
+    priority: 1
   }
 );
 
 await queue.add(
-  "send-notification",
+  "high-priority",
   {
-    message: "Hello",
+    message: "high"
+  },
+  {
+    priority: 10
   }
 );
 
+// --------------------------------------------------
+// 2. Delayed job
+// --------------------------------------------------
+
+await queue.add(
+  "delayed-job",
+  {
+    message: "runs later"
+  },
+  {
+    delay: 1_000
+  }
+);
+
+// --------------------------------------------------
+// 3. Retry + exponential backoff + DLQ
+// --------------------------------------------------
+
+await queue.add(
+  "failing-job",
+  {
+    message: "this should reach DLQ"
+  },
+  {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 200
+    }
+  }
+);
+
+// Give the worker enough time to process everything.
 await new Promise((resolve) =>
-  setTimeout(resolve, 3_000)
+  setTimeout(resolve, 8_000)
 );
 
 console.log(
-  `Jobs processed: ${processed}`
+  `Successful jobs: ${successfulJobs}`
 );
+
+console.log(
+  `Failed attempts: ${failedAttempts}`
+);
+
+// --------------------------------------------------
+// Shutdown
+// --------------------------------------------------
 
 await worker.close();
 await redis.close();
 
-console.log("E2E test finished.");
+console.log("Reliability E2E test finished.");
