@@ -30,6 +30,10 @@ export class Worker {
     private readonly delayedScheduler: DelayedJobScheduler;
     private readonly stalledRecovery: StalledJobRecovery;
 
+    private activeJobs = 0;
+    private closing = false;
+    private closePromise?: Promise<void>;
+
     constructor(
         name: string,
         processor: Processor,
@@ -78,7 +82,7 @@ export class Worker {
     }
 
     private async processLoop(): Promise<void> {
-        while (this.running) {
+        while (this.running && !this.closing) {
             const jobId = await claimJob(
                 this.client,
                 `queue:${this.name}:ready`,
@@ -93,6 +97,7 @@ export class Worker {
                 await this.sleep(100);
                 continue;
             }
+            this.activeJobs++;
 
             const job = await this.loadJob(jobId);
 
@@ -105,6 +110,8 @@ export class Worker {
                 await this.completeJob(jobId);
             } catch (error) {
                 await this.failJob(jobId, error);
+            } finally {
+                this.activeJobs--;
             }
         }
     }
@@ -140,37 +147,37 @@ export class Worker {
 
     private async completeJob(
         jobId: string
-      ): Promise<void> {
+    ): Promise<void> {
         await completeJob(
-          this.client,
-          `job:${this.name}:${jobId}`,
-          `queue:${this.name}:processing`,
-          jobId,
-          this.workerId
+            this.client,
+            `job:${this.name}:${jobId}`,
+            `queue:${this.name}:processing`,
+            jobId,
+            this.workerId
         );
-      }
+    }
 
-      private async failJob(
+    private async failJob(
         jobId: string,
         error: unknown
-      ): Promise<void> {
+    ): Promise<void> {
         const message =
-          error instanceof Error
-            ? error.message
-            : String(error);
-      
+            error instanceof Error
+                ? error.message
+                : String(error);
+
         await failJobAtomically(
-          this.client,
-          `job:${this.name}:${jobId}`,
-          `queue:${this.name}:processing`,
-          `queue:${this.name}:ready`,
-          `queue:${this.name}:delayed`,
-          `queue:${this.name}:dlq`,
-          jobId,
-          this.workerId,
-          message
+            this.client,
+            `job:${this.name}:${jobId}`,
+            `queue:${this.name}:processing`,
+            `queue:${this.name}:ready`,
+            `queue:${this.name}:delayed`,
+            `queue:${this.name}:dlq`,
+            jobId,
+            this.workerId,
+            message
         );
-      }
+    }
 
     private startHeartbeat(): void {
         this.heartbeatTimer = setInterval(
@@ -211,15 +218,35 @@ export class Worker {
     }
 
     async close(): Promise<void> {
-        this.running = false;
-      
-        this.delayedScheduler.stop();
-        this.stalledRecovery.stop();
-      
-        if (this.heartbeatTimer) {
-          clearInterval(this.heartbeatTimer);
+        if (this.closePromise) {
+            return this.closePromise;
         }
-      }
+
+        this.closePromise = new Promise<void>((resolve) => {
+            this.closing = true;
+            this.running = false;
+
+            this.delayedScheduler.stop();
+            this.stalledRecovery.stop();
+
+            if (this.heartbeatTimer) {
+                clearInterval(this.heartbeatTimer);
+            }
+
+            const waitForJobs = () => {
+                if (this.activeJobs === 0) {
+                    resolve();
+                    return;
+                }
+
+                setTimeout(waitForJobs, 50);
+            };
+
+            waitForJobs();
+        });
+
+        return this.closePromise;
+    }
 
     private sleep(ms: number): Promise<void> {
         return new Promise((resolve) =>
