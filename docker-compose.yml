@@ -1,16 +1,7 @@
 services:
-  postgres:
-    image: postgres:16
-    container_name: reliable-job-queue-db
+  redis:
+    image: redis:7
+    container_name: reliable-job-queue-redis
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: jobqueue
-      POSTGRES_PASSWORD: jobqueue_password
-      POSTGRES_DB: jobqueue
     ports:
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
+      - "6379:6379"

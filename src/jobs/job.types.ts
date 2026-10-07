@@ -1,24 +1,26 @@
-export interface CreateJobInput {
-    type: string;
-    payload: Record<string, unknown>;
-    priority?: number;
-    maxAttempts?: number;
-    runAt?: Date;
-  }
-  
-  export interface Job {
-    id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    status: string;
-    priority: number;
-    attempts: number;
-    max_attempts: number;
-    run_at: Date;
-    locked_at: Date | null;
-    locked_by: string | null;
-    last_error: string | null;
-    completed_at: Date | null;
-    created_at: Date;
-    updated_at: Date;
-  }
+export interface JobData {
+  id: string;
+  name: string;
+  data: Record<string, unknown>;
+
+  attemptsMade: number;
+  maxAttempts: number;
+
+  priority: number;
+
+  createdAt: number;
+  scheduledAt: number;
+
+  failedReason?: string;
+}
+
+export interface JobOptions {
+  priority?: number;
+  delay?: number;
+  attempts?: number;
+
+  backoff?: {
+    type: "fixed" | "exponential";
+    delay: number;
+  };
+}
