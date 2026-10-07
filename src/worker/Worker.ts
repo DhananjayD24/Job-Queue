@@ -4,6 +4,7 @@ import type { JobData } from "../jobs/job.types.js";
 import { claimJob } from "../redis/scripts/claimJob.js";
 import { DelayedJobScheduler } from "../queue/DelayedJobScheduler.js";
 import { StalledJobRecovery } from "./StalledJobRecovery.js";
+import { completeJob } from "../redis/scripts/completeJob.js";
 
 export type Processor = (job: JobData) => Promise<void>;
 
@@ -136,25 +137,17 @@ export class Worker {
         };
     }
 
-    private async completeJob(jobId: string): Promise<void> {
-        const jobKey = `job:${this.name}:${jobId}`;
-
-        await this.client
-            .multi()
-            .hset(
-                jobKey,
-                "status",
-                "completed",
-                "completedAt",
-                String(Date.now())
-            )
-            .lrem(
-                `queue:${this.name}:processing`,
-                1,
-                jobId
-            )
-            .exec();
-    }
+    private async completeJob(
+        jobId: string
+      ): Promise<void> {
+        await completeJob(
+          this.client,
+          `job:${this.name}:${jobId}`,
+          `queue:${this.name}:processing`,
+          jobId,
+          this.workerId
+        );
+      }
 
     private async failJob(
         jobId: string,
